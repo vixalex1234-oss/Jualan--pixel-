@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jualan Pixel Indonesia</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f2f5f9;text-align:center;margin:0;padding:16px}
+h1{color:#222}
+#grid{display:grid;grid-template-columns:repeat(40,1fr);gap:1px;background:#ccc;border:1px solid #aaa;max-width:600px;margin:20px auto}
+.pixel{aspect-ratio:1;background:white;padding:0;border:0;min-width:0}
+.pixel:hover{background:#bde0fe}
+button{cursor:pointer}
+.info{background:white;padding:16px;border-radius:12px;max-width:600px;margin:auto}
+</style>
+</head>
+<body>
+<h1>Jualan Pixel Indonesia</h1>
+<div class="info">
+<p>Pilih kotak pixel yang kamu inginkan.</p>
+<p>Harga: <b>Rp100 per pixel</b></p>
+<p>Pixel dipilih: <b id="jumlah">0</b></p>
+<p>Total: <b id="total">Rp0</b></p>
+<button onclick="resetPixel()">Batalkan pilihan</button>
+</div>
+<div id="grid"></div>
+<p>Transaksi QRIS belum diaktifkan.</p>
+<script>
+const grid=document.getElementById('grid');
+const selected=new Set();
+for(let i=0;i<1600;i++){
+ const p=document.createElement('button');
+ p.className='pixel';
+ p.title='Pixel '+(i+1);
+ p.onclick=()=>{
+  if(selected.has(i)){selected.delete(i);p.style.background='white'}
+  else{selected.add(i);p.style.background='#70d6ff'}
+  update();
+ };
+ grid.appendChild(p);
+}
+function update(){
+ document.getElementById('jumlah').textContent=selected.size;
+ document.getElementById('total').textContent='Rp'+(selected.size*100).toLocaleString('id-ID');
+}
+function resetPixel(){
+ selected.clear();
+ document.querySelectorAll('.pixel').forEach(p=>p.style.background='white');
+ update();
+}
+</script>
+</body>
+</html>
