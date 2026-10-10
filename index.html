@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" translate="no">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google" content="notranslate">
 <title>Jualan Pixel Indonesia</title>
 <style>
 body{font-family:Arial,sans-serif;background:#f2f5f9;text-align:center;margin:0;padding:16px}
@@ -10,6 +11,8 @@ h1{color:#222}
 #grid{display:grid;grid-template-columns:repeat(40,1fr);gap:1px;background:#ccc;border:1px solid #aaa;max-width:600px;margin:20px auto}
 .pixel{aspect-ratio:1;background:white;padding:0;border:0;min-width:0}
 .pixel:hover{background:#bde0fe}
+.pixel.sold{background:#adb5bd;cursor:not-allowed}
+.pixel.sold:hover{background:#adb5bd}
 button{cursor:pointer}
 .info{background:white;padding:16px;border-radius:12px;max-width:600px;margin:auto}
 </style>
@@ -21,33 +24,82 @@ button{cursor:pointer}
 <p>Harga: <b>Rp100 per pixel</b></p>
 <p>Pixel dipilih: <b id="jumlah">0</b></p>
 <p>Total: <b id="total">Rp0</b></p>
+<p>Pixel terjual: <b id="terjual">0</b> (abu-abu)</p>
 <button onclick="resetPixel()">Batalkan pilihan</button>
 </div>
 <div id="grid"></div>
 <p>Transaksi QRIS belum diaktifkan.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const grid=document.getElementById('grid');
-const selected=new Set();
-for(let i=0;i<1600;i++){
- const p=document.createElement('button');
- p.className='pixel';
- p.title='Pixel '+(i+1);
- p.onclick=()=>{
-  if(selected.has(i)){selected.delete(i);p.style.background='white'}
-  else{selected.add(i);p.style.background='#70d6ff'}
+// ISI DUA NILAI INI dari Supabase: Project Settings -> API
+const SUPABASE_URL = 'ISI_PROJECT_URL_DI_SINI';
+const SUPABASE_KEY = 'ISI_ANON_KEY_DI_SINI';
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TOTAL_PIXEL = 1600;
+const grid = document.getElementById('grid');
+const selected = new Set();
+const sold = new Set();
+const buttons = [];
+
+for (let i = 0; i < TOTAL_PIXEL; i++) {
+  const nomor = i + 1; // nomor pixel = id di tabel "pixel"
+  const p = document.createElement('button');
+  p.className = 'pixel';
+  p.title = 'Pixel ' + nomor;
+  p.onclick = () => {
+    if (sold.has(nomor)) return;
+    if (selected.has(nomor)) { selected.delete(nomor); p.style.background = ''; }
+    else { selected.add(nomor); p.style.background = '#70d6ff'; }
+    update();
+  };
+  grid.appendChild(p);
+  buttons.push(p);
+}
+
+function update() {
+  document.getElementById('jumlah').textContent = selected.size;
+  document.getElementById('total').textContent = 'Rp' + (selected.size * 100).toLocaleString('id-ID');
+  document.getElementById('terjual').textContent = sold.size;
+}
+
+function resetPixel() {
+  selected.clear();
+  buttons.forEach(p => { p.style.background = ''; });
   update();
- };
- grid.appendChild(p);
 }
-function update(){
- document.getElementById('jumlah').textContent=selected.size;
- document.getElementById('total').textContent='Rp'+(selected.size*100).toLocaleString('id-ID');
+
+function tandaiTerjual(nomor) {
+  sold.add(nomor);
+  selected.delete(nomor);
+  const p = buttons[nomor - 1];
+  if (!p) return;
+  p.classList.add('sold');
+  p.style.background = '';
+  p.disabled = true;
+  p.title = 'Pixel ' + nomor + ' (terjual)';
 }
-function resetPixel(){
- selected.clear();
- document.querySelectorAll('.pixel').forEach(p=>p.style.background='white');
- update();
+
+async function muatPixelTerjual() {
+  const ukuranHalaman = 1000;
+  let dari = 0;
+  while (true) {
+    const { data, error } = await db
+      .from('pixel')
+      .select('id')
+      .order('id')
+      .range(dari, dari + ukuranHalaman - 1);
+    if (error) { console.error('Gagal memuat pixel:', error.message); return; }
+    data.forEach(r => tandaiTerjual(r.id));
+    if (data.length < ukuranHalaman) break;
+    dari += ukuranHalaman;
+  }
+  update();
 }
+
+muatPixelTerjual();
 </script>
 </body>
 </html>
