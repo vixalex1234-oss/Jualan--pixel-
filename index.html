@@ -8,11 +8,13 @@
 <style>
 body{font-family:Arial,sans-serif;background:#f2f5f9;text-align:center;margin:0;padding:16px;color:#222}
 h1{color:#222}
-#grid{display:grid;grid-template-columns:repeat(40,1fr);gap:1px;background:#ccc;border:1px solid #aaa;max-width:600px;margin:20px auto}
+#grid{position:relative;display:grid;grid-template-columns:repeat(40,1fr);gap:1px;background:#ccc;border:1px solid #aaa;max-width:600px;margin:20px auto}
 .pixel{aspect-ratio:1;background:white;padding:0;border:0;min-width:0}
 .pixel:hover{background:#bde0fe}
 .pixel.sold{background:#adb5bd;cursor:not-allowed}
 .pixel.sold:hover{background:#adb5bd}
+.iklan{position:absolute;display:block;overflow:hidden;background:#adb5bd;z-index:2}
+.iklan img{display:block;width:100%;height:100%;object-fit:fill}
 button{cursor:pointer;font-size:15px}
 .card{background:white;padding:16px;border-radius:12px;max-width:600px;margin:12px auto;text-align:left;box-sizing:border-box}
 .card p{margin:8px 0}
@@ -26,6 +28,8 @@ input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px so
 .big{font-size:28px;font-weight:bold;color:#1e88e5;margin:6px 0}
 .steps li{margin:6px 0}
 .note{font-size:13px;color:#555}
+.hint{font-size:13px;color:#555;margin:6px 0}
+#pilihInfo{min-height:20px;font-weight:bold;color:#b00020}
 #bayar{display:none;border:2px solid #1e88e5}
 </style>
 </head>
@@ -33,25 +37,33 @@ input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px so
 <h1>Jualan Pixel Indonesia</h1>
 
 <div class="card center">
-<p>Pilih kotak pixel yang kamu inginkan.</p>
-<p>Harga: <b>Rp100 per pixel</b> (minimal 10 pixel)</p>
+<p>Pilih satu blok kotak pixel untuk iklanmu.</p>
+<p>Harga: <b>Rp100 per pixel</b></p>
+<p class="hint">Cara memilih: ketuk kotak <b>pojok kiri-atas</b> blokmu, lalu ketuk kotak <b>pojok kanan-bawah</b>. Untuk 1 pixel, ketuk kotak yang sama dua kali.</p>
+<p>Blok dipilih: <b id="ukuran">-</b></p>
 <p>Pixel dipilih: <b id="jumlah">0</b></p>
 <p>Total: <b id="total">Rp0</b></p>
 <p>Pixel terjual: <b id="terjual">0</b> (abu-abu)</p>
+<div id="pilihInfo"></div>
 <button onclick="resetPixel()">Batalkan pilihan</button>
 </div>
 
 <div id="grid"></div>
 
 <div class="card" id="form">
-<b>Pesan pixel yang dipilih</b>
+<b>Pesan blok yang dipilih</b>
 <label for="nama">Nama</label>
 <input id="nama" maxlength="60" autocomplete="name" placeholder="Nama kamu">
 <label for="email">Email</label>
 <input id="email" type="email" maxlength="100" autocomplete="email" placeholder="email@contoh.com">
+<label for="gambar">Link gambar iklan (opsional)</label>
+<input id="gambar" type="url" maxlength="500" placeholder="https://contoh.com/gambar.png">
+<label for="tujuan">Link tujuan saat iklan diklik (opsional)</label>
+<input id="tujuan" type="url" maxlength="500" placeholder="https://tokokamu.com">
+<p class="note">Gambar harus berupa link <b>https</b> yang bisa dibuka langsung. Gambarnya akan diregangkan mengikuti bentuk blokmu, jadi buat gambar dengan perbandingan lebar dan tinggi yang sama seperti blok. Iklan tampil setelah pembayaran lunas dan gambarnya dicek penjual. Gambar yang tidak pantas (dewasa, penipuan, SARA, dan sejenisnya) ditolak tanpa pengembalian dana.</p>
 <button class="btn" id="btnPesan" onclick="pesan()">Pesan &amp; lihat cara bayar</button>
 <div class="err" id="pesanError"></div>
-<p class="note">Pembayaran lewat transfer DANA. Pixel ditahan untuk kamu selama 60 menit setelah memesan.</p>
+<p class="note">Pembayaran lewat transfer DANA. Blokmu ditahan selama 60 menit setelah memesan.</p>
 </div>
 
 <div class="card" id="bayar">
@@ -66,7 +78,7 @@ input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px so
 <li>Buka aplikasi DANA, pilih <b>Kirim</b> ke nomor di atas, masukkan nominal persis seperti di atas.</li>
 <li>Setelah bayar, kirim <b>screenshot bukti</b> beserta <b>kode pesanan</b> ke email
 <a id="mailLink" href="#"></a>.</li>
-<li>Setelah pembayaranmu dicek, pixelmu berubah abu-abu di halaman ini. Biasanya butuh waktu, tergantung kapan penjual mengecek.</li>
+<li>Setelah pembayaranmu dicek, blokmu berubah abu-abu di halaman ini. Kalau kamu mengisi link gambar, gambarnya tampil setelah dicek penjual.</li>
 </ol>
 <p class="note">Simpan kode pesanan ini. Jika lewat batas bayar, pixel dilepas kembali.</p>
 </div>
@@ -83,49 +95,99 @@ const DANA_NOMOR = '083891252102';
 const EMAIL_BUKTI = 'vixalex1234@gmail.com';
 
 const FUNGSI_PESAN = SUPABASE_URL + '/functions/v1/super-processor';
-const MIN_PIXEL = 10;
+const MIN_PIXEL = 1;   // samakan dengan MIN_PIXEL di fungsi super-processor
 const HARGA = 100;
+const COLS = 40;
+const ROWS = 40;
+const TOTAL_PIXEL = COLS * ROWS;
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const TOTAL_PIXEL = 1600;
 const grid = document.getElementById('grid');
-const selected = new Set();
 const sold = new Set();
 const buttons = [];
+let anchor = null; // {c, r} ketukan pertama
+let rect = null;   // {x, y, w, h} blok terpilih
+
+function idOf(c, r) { return r * COLS + c + 1; }   // nomor pixel = id di tabel "pixel"
+function rupiah(n) { return 'Rp' + Number(n).toLocaleString('id-ID'); }
 
 for (let i = 0; i < TOTAL_PIXEL; i++) {
-  const nomor = i + 1; // nomor pixel = id di tabel "pixel"
+  const c = i % COLS;
+  const r = Math.floor(i / COLS);
   const p = document.createElement('button');
   p.className = 'pixel';
-  p.title = 'Pixel ' + nomor;
-  p.onclick = () => {
-    if (sold.has(nomor)) return;
-    if (selected.has(nomor)) { selected.delete(nomor); p.style.background = ''; }
-    else { selected.add(nomor); p.style.background = '#70d6ff'; }
-    update();
-  };
+  p.title = 'Pixel ' + (i + 1);
+  p.onclick = () => ketuk(c, r);
   grid.appendChild(p);
   buttons.push(p);
 }
 
-function rupiah(n) { return 'Rp' + Number(n).toLocaleString('id-ID'); }
+function info(teks) { document.getElementById('pilihInfo').textContent = teks || ''; }
+
+function ketuk(c, r) {
+  if (sold.has(idOf(c, r))) return;
+  info('');
+  if (!anchor || rect) {
+    // ketukan pertama (atau mulai blok baru)
+    rect = null;
+    anchor = { c: c, r: r };
+  } else {
+    const x = Math.min(anchor.c, c);
+    const y = Math.min(anchor.r, r);
+    const w = Math.abs(anchor.c - c) + 1;
+    const h = Math.abs(anchor.r - r) + 1;
+    anchor = null;
+    for (let rr = y; rr < y + h; rr++) {
+      for (let cc = x; cc < x + w; cc++) {
+        if (sold.has(idOf(cc, rr))) {
+          rect = null;
+          info('Blok itu mencakup pixel yang sudah terjual. Pilih blok lain.');
+          repaint();
+          update();
+          return;
+        }
+      }
+    }
+    rect = { x: x, y: y, w: w, h: h };
+  }
+  repaint();
+  update();
+}
+
+function repaint() {
+  buttons.forEach((p, i) => { if (!sold.has(i + 1)) p.style.background = ''; });
+  if (rect) {
+    for (let r = rect.y; r < rect.y + rect.h; r++) {
+      for (let c = rect.x; c < rect.x + rect.w; c++) {
+        buttons[idOf(c, r) - 1].style.background = '#70d6ff';
+      }
+    }
+  } else if (anchor) {
+    buttons[idOf(anchor.c, anchor.r) - 1].style.background = '#ffd166';
+  }
+}
+
+function jumlahPilih() { return rect ? rect.w * rect.h : 0; }
 
 function update() {
-  document.getElementById('jumlah').textContent = selected.size;
-  document.getElementById('total').textContent = rupiah(selected.size * HARGA);
+  const n = jumlahPilih();
+  document.getElementById('jumlah').textContent = n;
+  document.getElementById('total').textContent = rupiah(n * HARGA);
+  document.getElementById('ukuran').textContent = rect ? (rect.w + ' x ' + rect.h) : (anchor ? 'ketuk pojok kanan-bawah' : '-');
   document.getElementById('terjual').textContent = sold.size;
 }
 
 function resetPixel() {
-  selected.clear();
-  buttons.forEach(p => { if (!p.classList.contains('sold')) p.style.background = ''; });
+  anchor = null;
+  rect = null;
+  info('');
+  repaint();
   update();
 }
 
 function tandaiTerjual(nomor) {
   sold.add(nomor);
-  selected.delete(nomor);
   const p = buttons[nomor - 1];
   if (!p) return;
   p.classList.add('sold');
@@ -134,23 +196,85 @@ function tandaiTerjual(nomor) {
   p.title = 'Pixel ' + nomor + ' (terjual)';
 }
 
-async function muatPixelTerjual() {
+async function muatSemua(tabel, kolom) {
   const ukuranHalaman = 1000;
   let dari = 0;
+  const hasil = [];
   while (true) {
     const { data, error } = await db
-      .from('pixel')
-      .select('id')
-      .order('id')
+      .from(tabel)
+      .select(kolom)
+      .order(kolom.split(',')[0])
       .range(dari, dari + ukuranHalaman - 1);
-    if (error) { console.error('Gagal memuat pixel:', error.message); return; }
-    data.forEach(r => tandaiTerjual(r.id));
+    if (error) { console.error('Gagal memuat ' + tabel + ':', error.message); return hasil; }
+    hasil.push(...data);
     if (data.length < ukuranHalaman) break;
     dari += ukuranHalaman;
+  }
+  return hasil;
+}
+
+async function muatPixelTerjual() {
+  const baris = await muatSemua('pixel', 'id');
+  baris.forEach(r => tandaiTerjual(r.id));
+  // blok yang dipilih tapi ternyata sudah terjual -> batalkan
+  if (rect) {
+    for (let r = rect.y; r < rect.y + rect.h; r++) {
+      for (let c = rect.x; c < rect.x + rect.w; c++) {
+        if (sold.has(idOf(c, r))) { resetPixel(); return; }
+      }
+    }
   }
   update();
 }
 
+// ---------- Iklan gambar ----------
+const iklanList = [];
+
+function urlHttps(s) { return typeof s === 'string' && /^https:\/\//i.test(s); }
+
+function pasangIklan(a) {
+  if (!urlHttps(a.image_url)) return;
+  const kotak = urlHttps(a.link_url) ? document.createElement('a') : document.createElement('div');
+  kotak.className = 'iklan';
+  if (kotak.tagName === 'A') {
+    kotak.href = a.link_url;
+    kotak.target = '_blank';
+    kotak.rel = 'noopener noreferrer nofollow sponsored';
+  }
+  kotak.title = 'Iklan';
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.referrerPolicy = 'no-referrer';
+  img.src = a.image_url;
+  img.onerror = () => { img.remove(); }; // gambar gagal dimuat -> tetap abu-abu
+  kotak.appendChild(img);
+  grid.appendChild(kotak);
+  iklanList.push({ el: kotak, a: a });
+}
+
+function aturIklan() {
+  iklanList.forEach(({ el, a }) => {
+    const kiriAtas = buttons[idOf(a.x, a.y) - 1];
+    const kananBawah = buttons[idOf(a.x + a.w - 1, a.y + a.h - 1) - 1];
+    if (!kiriAtas || !kananBawah) { el.style.display = 'none'; return; }
+    el.style.left = kiriAtas.offsetLeft + 'px';
+    el.style.top = kiriAtas.offsetTop + 'px';
+    el.style.width = (kananBawah.offsetLeft + kananBawah.offsetWidth - kiriAtas.offsetLeft) + 'px';
+    el.style.height = (kananBawah.offsetTop + kananBawah.offsetHeight - kiriAtas.offsetTop) + 'px';
+  });
+}
+
+async function muatIklan() {
+  const baris = await muatSemua('iklan', 'merchant_ref,x,y,w,h,image_url,link_url');
+  baris.forEach(pasangIklan);
+  aturIklan();
+}
+
+window.addEventListener('resize', aturIklan);
+
+// ---------- Pesan ----------
 async function pesan() {
   const err = document.getElementById('pesanError');
   const btn = document.getElementById('btnPesan');
@@ -158,13 +282,17 @@ async function pesan() {
 
   const nama = document.getElementById('nama').value.trim();
   const email = document.getElementById('email').value.trim();
+  const gambar = document.getElementById('gambar').value.trim();
+  const tujuan = document.getElementById('tujuan').value.trim();
 
-  if (selected.size < MIN_PIXEL) {
-    err.textContent = 'Pilih minimal ' + MIN_PIXEL + ' pixel (' + rupiah(MIN_PIXEL * HARGA) + ').';
+  if (!rect || jumlahPilih() < MIN_PIXEL) {
+    err.textContent = 'Pilih blok pixel dulu (ketuk dua pojok blokmu di kotak-kotak atas).';
     return;
   }
   if (nama.length < 2) { err.textContent = 'Isi nama kamu.'; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Email tidak valid.'; return; }
+  if (gambar && !urlHttps(gambar)) { err.textContent = 'Link gambar harus diawali https://'; return; }
+  if (tujuan && !urlHttps(tujuan)) { err.textContent = 'Link tujuan harus diawali https://'; return; }
 
   btn.disabled = true;
   btn.textContent = 'Memproses...';
@@ -172,7 +300,10 @@ async function pesan() {
     const res = await fetch(FUNGSI_PESAN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
-      body: JSON.stringify({ pixels: Array.from(selected), nama: nama, email: email })
+      body: JSON.stringify({
+        x: rect.x, y: rect.y, w: rect.w, h: rect.h,
+        nama: nama, email: email, gambar_url: gambar, link_url: tujuan
+      })
     });
     let data = null;
     try { data = await res.json(); } catch (e) { /* abaikan */ }
@@ -222,6 +353,7 @@ async function salin() {
 }
 
 muatPixelTerjual();
+muatIklan();
 </script>
 </body>
 </html>
